@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Evergreen Chain — Command Center (HTML 13)</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;line-height:1.5;-webkit-font-smoothing:antialiased;background:linear-gradient(180deg,#F8FAFC 0%,#F3F4F6 100%);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0B1220}
+  img,canvas,svg{display:block;max-width:100%}
+  :root{
+    --brand:#2563EB; --green:#10B981; --ink-weak:#6B7280; --ink:#0B1220; --card:#FFFFFF; --line:#E5E7EB; --warn:#F59E0B; --crit:#EF4444;
+    --shadow-1:0 8px 24px rgba(17,24,39,.08),0 2px 6px rgba(17,24,39,.06);
+    --radius:14px; --sidebar-w:90px;
+  }
+
+  .app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;min-height:100dvh}
+  @media (max-width:860px){ .app{grid-template-columns:1fr;grid-template-rows:auto 1fr} }
+
+  .sidebar{position:sticky;top:0;height:100dvh;padding:14px 8px;background:#0B1A3A;color:#E5E7EB;display:flex;flex-direction:column;gap:14px;z-index:20}
+  .brand{display:grid;place-items:center;height:50px}
+  .logo{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:radial-gradient(60% 60% at 50% 45%,#10B981 0%,#0EA5E9 60%,#2563EB 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),0 4px 14px rgba(16,185,129,.35)}
+  .nav{display:grid;gap:10px}
+  .nav button{display:grid;place-items:center;position:relative;width:100%;padding:12px;background:transparent;color:#DBEAFE;border:1px solid transparent;border-radius:14px;cursor:pointer;transition:.15s}
+  .nav button:hover{background:rgba(59,130,246,.14);border-color:rgba(59,130,246,.28)}
+  .nav button.active{background:linear-gradient(180deg,rgba(59,130,246,.2),rgba(29,78,216,.24));border-color:rgba(255,255,255,.25);color:#fff;box-shadow:0 6px 18px rgba(37,99,235,.25)}
+  .nav .badge{position:absolute;right:3px;top:-6px;font-size:12px;padding:0 8px;line-height:20px;border-radius:999px;background:rgba(239,68,68,.15);color:#fecaca;border:1px solid rgba(239,68,68,.5)}
+  .nav .badge.ok{background:rgba(16,185,129,.12);color:#C7F9E9;border-color:rgba(16,185,129,.5)}
+  .sidebar .footer{margin-top:auto;font-size:11px;color:#9CA3AF;opacity:.9;text-align:center}
+  @media (max-width:860px){ .sidebar{display:none} }
+
+  .topbar{display:none;position:sticky;top:0;z-index:30;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:10px 12px;align-items:center;gap:10px}
+  @media (max-width:860px){ .topbar{display:flex} }
+
+  .content{padding:18px;display:grid;grid-template-rows:auto 1fr;gap:18px;overflow:hidden}
+  .page{display:none}
+  .page.active{display:grid;gap:16px}
+
+  .row{display:flex;gap:12px;align-items:center}
+  .spacer{flex:1}
+
+  .btn{appearance:none;border:1px solid transparent;background:var(--brand);color:#fff;border-radius:12px;padding:10px 14px;cursor:pointer;font-weight:600;box-shadow:0 6px 16px rgba(37,99,235,.25);transition:.15s}
+  .btn:hover{transform:translateY(-1px)}
+  .btn.secondary{background:#fff;color:var(--brand);border-color:var(--brand);box-shadow:none}
+  .btn.success{background:var(--green);border-color:var(--green)}
+  .btn.ghost{background:#fff;border-color:var(--line);color:#0F172A;box-shadow:none}
+
+  .section-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-1);padding:14px}
+  .h1{font-size:22px;font-weight:800}
+  .h2{font-size:18px;font-weight:700}
+  .sub{color:#64748B;font-size:13px}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+  @media (max-width:1024px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (max-width:560px){ .kpis{grid-template-columns:1fr} }
+  .kpi{display:grid;gap:10px;padding:16px;background:linear-gradient(180deg,#FFFFFF,#FAFAFB);border:1px solid var(--line);border-radius:14px}
+  .kpi .label{color:#6B7280;font-size:13px}
+  .kpi .value{font-size:28px;font-weight:800}
+  .kpi .delta{font-size:12px;color:#065F46;background:rgba(16,185,129,.12);padding:2px 8px;border-radius:999px;width:fit-content;border:1px solid rgba(16,185,129,.35)}
+  .kpi .delta.warn{color:#7C2D12;background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.35)}
+  .countup{opacity:1}
+
+  .map-wrap{position:relative}
+  #liveLeaflet{height:420px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+  .map-toolbar{position:absolute;top:10px;left:10px;display:flex;gap:8px;flex-wrap:wrap}
+  .map-btn{background:white;border:1px solid var(--line);border-radius:10px;padding:8px 10px;box-shadow:var(--shadow-1);cursor:pointer;font-weight:600;color:#0F172A}
+  .legend{position:absolute;bottom:10px;right:10px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:flex;gap:14px;align-items:center;box-shadow:var(--shadow-1)}
+  .dot{width:12px;height:12px;border-radius:50%;border:2px solid rgba(17,24,44,.15)}
+  .dot.ok{background:var(--green)} .dot.warn{background:var(--warn)} .dot.crit{background:var(--crit);animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45)}50%{box-shadow:0 0 0 10px rgba(239,68,68,0)}}
+
+  .table-wrap{overflow:auto}
+  .table{width:100%;border-collapse:collapse;overflow:hidden;border-radius:12px;border:1px solid var(--line);background:var(--card)}
+  .table thead th{background:#F8FAFC;color:#334155;text-align:left;font-weight:600;font-size:13px;padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0}
+  .table tbody td{padding:10px 12px;border-bottom:1px solid var(--line);color:#111827;font-size:14px}
+  .table tbody tr.highlight{background:rgba(59,130,246,.08)}
+  .status-pill{display:inline-flex;align-items:center;gap:8px;padding:2px 10px;border-radius:999px;border:1px solid;font-size:12px}
+  .status-ok{background:rgba(16,185,129,.12);color:#065F46;border-color:rgba(16,185,129,.35)}
+  .status-warn{background:rgba(245,158,11,.12);color:#7C2D12;border-color:rgba(245,158,11,.35)}
+  .status-crit{background:rgba(239,68,68,.12);color:#7F1D1D;border-color:rgba(239,68,68,.35)}
+
+  .chart-card{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,#FFFFFF 0%,#FAFAFB 100%);padding:12px;min-height:340px}
+  .timeswitch{display:flex;gap:6px}
+  .timeswitch button{border:1px solid var(--line);background:#fff;color:#0F172A;padding:6px 10px;border-radius:999px;cursor:pointer}
+  .timeswitch button.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .chart-legend{position:absolute;top:56px;right:14px;display:flex;gap:10px;font-size:12px;color:#64748B;z-index:2}
+  .legend-item{display:flex;align-items:center;gap:6px;padding:4px 8px;background:#fff;border:1px solid var(--line);border-radius:999px}
+  .legend-swatch{width:10px;height:10px;border-radius:2px}
+  .sw-temp{background:#2563EB}
+  .sw-hum{background:#10B981}
+  .canvas-wrap{position:relative;height:260px;margin-top:6px}
+  .chart-bggrid{position:absolute;inset:8px 8px 18px 44px;border-radius:12px;background:linear-gradient(180deg,rgba(37,99,235,.04),rgba(16,185,129,.03));box-shadow:inset 0 0 0 1px var(--line)}
+  #chart-live{position:relative;z-index:1;width:100%;height:100%}
+  .tip{position:absolute;pointer-events:none;background:#0B1220;color:#E5E7EB;padding:6px 8px;border-radius:8px;font-size:12px;box-shadow:0 6px 16px rgba(17,24,44,.25);transform:translate(-50%,-120%);white-space:nowrap;z-index:3}
+  .hidden{display:none!important}
+  .photo-strip{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .photo{display:flex;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 10px;box-shadow:var(--shadow-1)}
+  .photo img{width:54px;height:40px;border-radius:8px;border:1px solid var(--line);object-fit:cover}
+  .photo .meta{font-size:12px;color:#334155}
+  .export-row{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+  .icon-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;color:#0F172A;border-radius:10px;padding:8px 10px;cursor:pointer}
+
+  .vitals-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:1080px){ .vitals-grid{grid-template-columns:1fr} }
+  .vcard{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:var(--shadow-1)}
+  .vicon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center}
+  .vtitle{font-size:12px;color:#6B7280}
+  .vvalue{font-size:22px;font-weight:800}
+  .ok{color:#065F46}
+  .warn{color:#7C2D12}
+  .ring{--p:0;position:relative;width:44px;height:44px;border-radius:50%;background:conic-gradient(#2563EB var(--p), #E5E7EB 0)}
+  .ring::after{content:'';position:absolute;inset:5px;border-radius:50%;background:#fff}
+
+  .filters{display:flex;gap:8px;flex-wrap:wrap}
+  .pill{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 10px;cursor:pointer}
+  .pill.active{border-color:#2563EB;color:#2563EB;background:#EFF6FF}
+  .feed{display:grid;gap:10px}
+  .alert-row{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .aicon{width:28px;height:28px;border-radius:8px;display:grid;place-items:center}
+  .level-crit .aicon{background:#FEE2E2;color:#B91C1C}
+  .level-warn .aicon{background:#FEF3C7;color:#B45309}
+  .level-info .aicon{background:#DBEAFE;color:#1E40AF}
+  .atag{font-size:12px;border-radius:999px;padding:2px 8px;border:1px solid}
+  .atag.crit{background:#FEE2E2;border-color:#FCA5A5;color:#991B1B}
+  .atag.warn{background:#FEF3C7;border-color:#FCD34D;color:#7C2D12}
+  .atag.info{background:#DBEAFE;border-color:#93C5FD;color:#1E3A8A}
+  .feed-empty{display:grid;place-items:center;padding:24px;border:1px dashed var(--line);border-radius:12px;background:#fff;color:#6B7280}
+
+  .seal{display:flex;align-items:center;gap:10px;background:rgba(16,185,129,.08);border:1px dashed rgba(16,185,129,.5);padding:12px;border-radius:12px;color:#065F46}
+  .seal .emblem{width:32px;height:32px;border-radius:999px;background:#10B981;display:grid;place-items:center;color:#fff;font-weight:800;box-shadow:0 0 0 4px rgba(16,185,129,.2)}
+
+  .driver{max-width:520px;margin:0 auto}
+  .driver .mini-map{height:280px;border-radius:12px;border:1px solid var(--line);overflow:hidden}
+  .driver .actions{position:sticky;bottom:10px;display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .driver .danger{position:fixed;inset:0;background:#DC2626;color:#fff;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;z-index:100}
+  .driver .danger.show{display:flex}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <button id="mobileMenuBtn" class="btn secondary" aria-label="Open navigation">☰</button>
+    <div class="spacer"></div>
+    <div class="row" style="font-size:12px;color:#6B7280">Linh — Operations</div>
+  </div>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><div class="logo" aria-hidden="true"></div></div>
+      <nav class="nav" aria-label="Primary">
+        <button class="active" data-nav="dashboard" aria-current="page">📊</button>
+        <button data-nav="live">🚚 <span class="badge">3</span></button>
+        <button data-nav="planner">🧭</button>
+        <button data-nav="alerts">⚠️ <span class="badge">2</span></button>
+        <button data-nav="reports">📑 <span class="badge ok">8</span></button>
+        <button data-nav="driver">📱</button>
+      </nav>
+      <div class="footer">Evergreen Trust • Reduce waste, save energy, cut CO₂ • © 2025</div>
+    </aside>
+
+    <main class="content">
+      <!-- Dashboard -->
+      <section class="page active" id="page-dashboard">
+        <div class="row" style="justify-content:space-between">
+          <div><div class="h1">Linh’s Command Center</div><div class="sub">End-to-end visibility across Vietnam’s cold chain network</div></div>
+          <div class="row"><button class="btn secondary" data-nav="reports">View Reports</button><button class="btn" data-nav="planner">Plan New Journey</button></div>
+        </div>
+
+        <div class="kpis">
+          <div class="kpi">
+            <div class="label">Total Shipments</div>
+            <div class="value countup" id="kpi-total" data-target="42" data-decimals="0" data-suffix=" Active">42 Active</div>
+            <div class="sub">Fleet: 28 trucks • 12 containers • 2 cold rooms</div>
+          </div>
+          <div class="kpi">
+            <div class="label">On-Time Percentage</div>
+            <div class="value countup" id="kpi-otp" data-target="98.7" data-decimals="1" data-suffix="%">98.7%</div>
+            <div class="delta">+1.2% vs last 7 days</div>
+          </div>
+          <div class="kpi">
+            <div class="label">At-Risk Shipments</div>
+            <div class="value countup" id="kpi-risk" data-target="3" data-decimals="0" data-suffix=" Critical Alerts">3 Critical Alerts</div>
+            <div class="delta warn">Action needed: 1 inspection pending</div>
+          </div>
+          <div class="kpi">
+            <div class="label">CO₂ Saved This Month</div>
+            <div class="value countup" id="kpi-co2" data-target="1.2" data-decimals="1" data-suffix=" Tons">1.2 Tons</div>
+            <div class="sub">AI route + energy optimisation</div>
+          </div>
+        </div>
+
+        <div class="section-card map-wrap">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="h2">Live Map</div><div class="sub">Colored markers indicate current condition</div></div>
+          <div id="liveLeaflet"></div>
+          <div class="map-toolbar"><button class="map-btn" id="fitVNBtn">Fit Vietnam</button><button class="map-btn" id="satToggleBtn">🛰️ Satellite</button><button class="map-btn" id="clusterToggleBtn">Cluster</button></div>
+          <div class="legend"><div class="row"><span class="dot ok"></span>Normal</div><div class="row"><span class="dot warn"></span>Warning</div><div class="row"><span class="dot crit"></span>Critical</div></div>
+        </div>
+
+        <div class="section-card">
+          <div class="row" style="justify-content:space-between;margin-bottom:8px"><div class="h2">Active Shipments</div><button class="map-btn" id="toggleEmpty">Toggle Empty State</button></div>
+          <div class="table-wrap" id="tableWrap">
+            <table class="table">
+              <thead><tr><th>Shipment ID</th><th>Origin</th><th>Destination</th><th>Status</th><th>ETA</th></tr></thead>
+              <tbody>
+                <tr data-row="HCM-307"><td><button class="btn ghost" data-open-live="HCM-307">HCM-307</button></td><td>Ho Chi Minh City</td><td>Hai Phong</td><td><span class="status-pill status-crit">Critical</span></td><td>16:45</td></tr>
+                <tr data-row="DN-221"><td><button class="btn ghost" data-open-live="DN-221">DN-221</button></td><td>Da Nang</td><td>Hanoi</td><td><span class="status-pill status-warn">Warning</span></td><td>20:10</td></tr>
+                <tr data-row="HN-104"><td><button class="btn ghost" data-open-live="HN-104">HN-104</button></td><td>Hanoi</td><td>Vientiane</td><td><span class="status-pill status-ok">On Track</span></td><td>Tomorrow 08:30</td></tr>
+                <tr data-row="LD-090"><td><button class="btn ghost" data-open-live="LD-090">LD-090</button></td><td>Lam Dong</td><td>Ho Chi Minh City</td><td><span class="status-pill status-ok">On Track</span></td><td>Today 22:05</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="emptyState" class="section-card" style="display:none;text-align:center">
+            <div class="sub" style="margin-bottom:8px">No active shipments</div>
+            <button class="btn" data-nav="planner">Plan a New Journey</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live -->
+      <section class="page" id="page-live">
+        <div class="row" style="justify-content:space-between">
+          <div><div class="h1">Live Fleet — Shipment <span id="live-shipment-id" class="mono">HCM-307</span></div><div class="sub">Real-time smart monitoring with predictive alerts</div></div>
+          <div class="row"><button class="btn secondary" data-nav="dashboard">Back to Dashboard</button><button class="btn" id="acknowledgeBtn">Acknowledge Alert</button></div>
+        </div>
+
+        <div class="section-card" style="display:grid;grid-template-columns:360px 1fr;gap:16px">
+          <div>
+            <div class="h2">Realtime Vitals</div>
+            <div class="vitals-grid" style="margin-top:10px">
+              <div class="vcard">
+                <div class="vicon ring" id="tempRing" style="--p:65%"></div>
+                <div>
+                  <div class="vtitle">Cargo Temperature</div>
+                  <div class="vvalue" id="vital-temp">1.5°C</div>
+                  <div class="sub">Target: 1–2°C</div>
+                </div>
+              </div>
+              <div class="vcard">
+                <div class="vicon" style="background:#ECFDF5;border:1px solid #BBF7D0;border-radius:12px">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 3v12" stroke="#10B981" stroke-width="2" stroke-linecap="round"/><path d="M8 15a4 4 0 108 0" stroke="#10B981" stroke-width="2"/></svg>
+                </div>
+                <div>
+                  <div class="vtitle">Humidity</div>
+                  <div class="vvalue ok" id="vital-hum">85%</div>
+                  <div class="sub">Target: 85–90%</div>
+                </div>
+              </div>
+              <div class="vcard">
+                <div class="vicon" style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2l4 7-4 11-4-11 4-7z" fill="#2563EB"/></svg>
+                </div>
+                <div>
+                  <div class="vtitle">GPS / Speed</div>
+                  <div class="vvalue" id="vital-gps" style="font-size:18px">10.7758, 106.7004 • 62 km/h</div>
+                  <div class="sub">Highway 1A</div>
+                </div>
+              </div>
+              <div class="vcard">
+                <div class="vicon" style="background:#FFF7ED;border:1px solid #FDE68A;border-radius:12px">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="4" y="10" width="16" height="10" rx="2" stroke="#F59E0B" stroke-width="2"/><path d="M8 10V7a4 4 0 118 0v3" stroke="#F59E0B" stroke-width="2"/></svg>
+                </div>
+                <div>
+                  <div class="vtitle">Door Status</div>
+                  <div class="vvalue" id="vital-door" style="font-size:18px">Locked</div>
+                  <div class="sub">Tamper-evident</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="alerts" style="margin-top:12px">
+              <div class="section-card" style="padding:10px;border-color:#FCA5A5;background:#FEF2F2;color:#7F1D1D" id="alert-1"><div style="font-weight:700">Alert</div><div>Cooling unit duty cycle has increased 15% without a corresponding temperature drop. Potential coolant leak detected.</div><div class="sub">Detected 14:12 • Confidence: 0.88 • Source: Smart Monitoring</div></div>
+              <div class="section-card" style="padding:10px;border-color:#FCD34D;background:#FFFBEB;color:#7C2D12" id="alert-2"><div style="font-weight:700">Warning</div><div>Based on current thermal gradient and external weather, risk of critical temperature breach in the next two hours. Recommend immediate driver inspection.</div><div class="sub">Forecast window: 2h • Action: Pull-over-safe, inspect condenser fins and hoses</div></div>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="row" style="justify-content:space-between"><div class="h2">Temperature & Humidity — Last 24h</div><div class="timeswitch"><button class="active" data-range="24h">24h</button><button data-range="7d">7d</button><button data-range="30d">30d</button></div></div>
+            <div class="chart-legend"><div class="legend-item"><span class="legend-swatch sw-temp"></span>Temperature</div><div class="legend-item"><span class="legend-swatch sw-hum"></span>Humidity</div></div>
+            <div class="canvas-wrap"><div class="chart-bggrid"></div><canvas id="chart-live"></canvas><div id="chart-tip" class="tip hidden"></div></div>
+            <div class="photo-strip" id="photoStrip"></div>
+            <div class="export-row"><button class="icon-btn" id="downloadPng">Export PNG</button><button class="icon-btn" id="toggleFill">Toggle Fills</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Planner -->
+      <section class="page" id="page-planner">
+        <div class="row" style="justify-content:space-between"><div><div class="h1">Journey Planner</div><div class="sub">AI-driven route and energy optimisation</div></div><div class="row"><button class="btn secondary" data-nav="dashboard">Back to Dashboard</button><button class="btn" id="simulateRoutesBtn">Simulate AI Routes</button></div></div>
+        <div class="section-card">
+          <div class="row" style="gap:12px;flex-wrap:wrap">
+            <div><label class="sub" for="origin">Origin</label><input id="origin" type="text" value="Da Lat (Lam Dong)" style="display:block;padding:10px 12px;border-radius:12px;border:1px solid var(--line)"></div>
+            <div><label class="sub" for="destination">Destination</label><input id="destination" type="text" value="Ho Chi Minh City" style="display:block;padding:10px 12px;border-radius:12px;border:1px solid var(--line)"></div>
+            <div><label class="sub" for="product">Product</label><select id="product" style="display:block;padding:10px 12px;border-radius:12px;border:1px solid var(--line)"><option>Strawberries (Premium)</option><option selected>Dragon Fruit</option><option>Lychee</option><option>Shrimp</option></select></div>
+            <div><label class="sub" for="temp">Temp (°C)</label><input id="temp" type="number" step="0.1" value="1.5" style="display:block;padding:10px 12px;border-radius:12px;border:1px solid var(--line)"></div>
+            <div class="row" style="align-self:flex-end"><button class="btn" id="planBtn">Plan Routes</button><button class="btn secondary" id="clearBtn">Clear</button></div>
+            <div class="sub" id="planStatus" style="display:none">AI is planning optimal routes…</div>
+          </div>
+          <div style="margin-top:12px" class="sub" id="routes-sub">Enter the details and click Plan Routes</div>
+          <div class="routes" id="routes" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:10px"></div>
+        </div>
+      </section>
+
+      <!-- Alerts -->
+      <section class="page" id="page-alerts">
+        <div class="row" style="justify-content:space-between">
+          <div><div class="h1">Alerts</div><div class="sub">Real-time and historical alert feed</div></div>
+          <button class="btn secondary" data-nav="dashboard">Back</button>
+        </div>
+        <div class="section-card" style="display:grid;gap:12px">
+          <div class="filters">
+            <button class="pill active" data-filter="all">All</button>
+            <button class="pill" data-filter="critical">Critical</button>
+            <button class="pill" data-filter="warning">Warning</button>
+            <button class="pill" data-filter="info">Info</button>
+          </div>
+          <div id="alertsFeed" class="feed"></div>
+          <div id="alertsEmpty" class="feed-empty" style="display:none">No alerts in this filter</div>
+        </div>
+      </section>
+
+      <!-- Reports -->
+      <section class="page" id="page-reports">
+        <div class="row" style="justify-content:space-between"><div><div class="h1">Reports</div><div class="sub">Completed shipments and verifiable records</div></div><button class="btn secondary" data-nav="dashboard">Back</button></div>
+        <div class="section-card" style="margin-top:10px">
+          <table class="table">
+            <thead><tr><th>Shipment ID</th><th>Product</th><th>Origin → Destination</th><th>Delivered</th><th>Certificate</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">DL-555</td><td>Strawberries (Premium)</td><td>Da Lat → Singapore</td><td>2025-08-12 09:22</td><td><button class="btn" data-nav="certificate" data-cert="DL-555">View Certificate</button></td></tr>
+              <tr><td class="mono">HN-431</td><td>Lychee</td><td>Bac Giang → Shanghai</td><td>2025-08-10 15:41</td><td><button class="btn" data-nav="certificate" data-cert="HN-431">View Certificate</button></td></tr>
+              <tr><td class="mono">CT-302</td><td>Shrimp</td><td>Can Tho → Tokyo</td><td>2025-08-08 18:10</td><td><button class="btn" data-nav="certificate" data-cert="CT-302">View Certificate</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Certificate -->
+      <section class="page" id="page-certificate">
+        <div class="section-card" style="display:grid;gap:16px;max-width:980px;margin:0 auto">
+          <div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:10px">
+            <div><div class="h1">Verifiable Certificate of Provenance</div><div class="sub" id="cert-id">Shipment: DL-555 • Evergreen Chain Ledger</div></div>
+            <div class="row"><button class="btn secondary" data-nav="reports">Back to Reports</button><button class="btn" id="shareBtn">Share</button></div>
+          </div>
+          <div class="row" style="gap:16px;flex-wrap:wrap">
+            <div class="section-card" style="flex:1 1 320px"><div class="h2">Shipment Details</div><div class="sub" id="cert-details" style="margin-top:6px">Product: Strawberries (Premium) • Quantity: 1,200 kg<br/>Origin: Da Lat (Lam Dong), Vietnam → Destination: Singapore (Changi Cargo)</div></div>
+            <div class="section-card" style="flex:1 1 320px"><div class="h2">Immutable Journey Log</div><div style="display:grid;gap:10px;margin-top:8px" id="journeyLog"></div></div>
+          </div>
+          <div class="section-card">
+            <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h2">Complete Temperature Record</div><div class="sub">Continuous telemetry proving the cold chain was never broken</div></div><div class="seal"><div class="emblem">✓</div><div><strong>Journey Secured on Evergreen Chain Ledger</strong><br/><span class="sub">Cryptographically verifiable</span></div></div></div>
+            <div class="chart-card" style="margin-top:8px;position:relative"><div id="certSkeleton" style="position:absolute;inset:12px;border:1px dashed #E5E7EB;border-radius:12px;display:grid;place-items:center;color:#6B7280">Loading Telemetry…</div><canvas id="chart-cert"></canvas></div>
+          </div>
+          <div class="seal"><div class="emblem">✓</div><div><strong>Ledger Integrity</strong><br/><span class="sub">Data is permanent and cannot be altered. Proof hash: <span class="mono" id="cert-hash">0x9f1a…7b3c</span></span></div><div class="spacer"></div><button class="btn secondary" id="verifyBtn">Verify</button></div>
+        </div>
+      </section>
+
+      <!-- Driver -->
+      <section class="page" id="page-driver">
+        <div class="driver">
+          <div style="text-align:center;margin-top:6px"><div class="sub">Shipment HCM-307</div><div style="font-size:52px;font-weight:900">1.6°C</div><div class="sub">To: Hai Phong • ETA 16:45</div></div>
+          <div class="mini-map" id="driverMap" style="margin-top:12px"></div>
+          <div class="section-card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><div class="sub">Route Guidance</div><button class="map-btn" id="simulateCritical">Simulate Critical Alert</button></div><div class="sub" id="drvMsg" style="margin-top:6px">Maintain setpoint 1.5°C • Speed 62 km/h</div></div>
+          <div class="actions"><button class="btn success" id="confirmArrival">Confirm Arrival</button><button class="btn" style="background:#F59E0B;border-color:#F59E0B" id="reportIssue">Report Issue</button></div>
+          <div class="driver danger" id="drvDanger"><div><div style="font-size:38px;font-weight:900">PULL OVER</div><div style="margin-top:4px;font-size:16px">INSPECT COOLING UNIT</div><div class="sub" style="margin-top:8px;color:#fff;opacity:.9">Check condenser fins and hoses • Confirm after inspection</div><div class="row" style="justify-content:center;margin-top:14px"><button class="btn secondary" id="dismissDanger">I Inspected It</button></div></div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<script>
+/* Shortcuts */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const pages={};
+
+/* DOM ready boot */
+document.addEventListener('DOMContentLoaded',()=>{
+  $$('.page').forEach(sec=>{ pages[sec.id.replace('page-','')]=sec; });
+  initKPI();
+  initMap();
+  ensureLiveChart();
+  initDriver();
+  bindNav();
+  bindEmptyToggle();
+  renderAlerts('all');
+  bindAlertFilters();
+  bindCertButtons();
+  bindShareVerify();
+  bindPlanner();
+  setInterval(()=>{ if(pages.live && pages.live.classList.contains('active')){ randomiseVitals(); updateChartRealtime(); } }, 5000);
+});
+
+/* Mobile menu + Nav */
+let sidebarOpen=false;
+function bindNav(){
+  const sidebar=$('#sidebar'), mobileMenuBtn=$('#mobileMenuBtn');
+  if(mobileMenuBtn){
+    mobileMenuBtn.addEventListener('click',()=>{
+      sidebarOpen=!sidebarOpen;
+      if(sidebar) sidebar.style.display = sidebarOpen ? 'flex' : '';
+    });
+  }
+  $$('.nav button,[data-nav="certificate"]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const key=btn.getAttribute('data-nav');
+      if(key==='certificate'){ const id=btn.getAttribute('data-cert')||'DL-555'; loadCertificate(id); }
+      if(key) setActivePage(key);
+    });
+  });
+  document.body.addEventListener('click',e=>{
+    const t=e.target.closest('[data-open-live]');
+    if(t){ const id=t.getAttribute('data-open-live'); if(id){ openLiveFor(id); } }
+  });
+}
+
+function setActivePage(key){
+  Object.values(pages).forEach(p=>p.classList.remove('active'));
+  if(pages[key]) pages[key].classList.add('active');
+  $$('.nav button').forEach(b=>b.classList.remove('active'));
+  const navBtn=document.querySelector(`.nav button[data-nav="${key}"]`);
+  if(navBtn) navBtn.classList.add('active');
+  const sidebar=$('#sidebar');
+  if(window.innerWidth<=860 && sidebar && sidebar.style.display==='flex'){
+    sidebar.style.display=''; sidebarOpen=false;
+  }
+  if(key==='dashboard' && map){ setTimeout(()=>map.invalidateSize(),0); }
+  if(key==='live'){ ensureLiveChart(); }
+  if(key==='certificate'){ initCert(); }
+  if(key==='driver' && drvMap){ setTimeout(()=>drvMap.invalidateSize(),30); }
+}
+
+/* KPIs */
+function animateCount(el){
+  const target=parseFloat(el.dataset.target||'0');
+  const decimals=parseInt(el.dataset.decimals||'0',10);
+  const suffix=el.dataset.suffix||'';
+  const startVal=parseFloat((el.textContent||'').replace(/[^\d.]/g,'')) || 0;
+  const start=performance.now();
+  const duration=900;
+  function step(ts){
+    const p=Math.min(1,(ts-start)/duration);
+    const val=(startVal+(target-startVal)*p).toFixed(decimals)+suffix;
+    el.textContent=val;
+    if(p<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+function initKPI(){ $$('.countup').forEach(animateCount); }
+
+/* Map */
+let map, markersLayer, clusterLayer, usingCluster=false, tileBase, tileSat;
+const vnBounds = L.latLngBounds([8.18,102.05],[23.50,110.50]);
+
+function truckSvg(color,stroke='#fff'){
+  const body=encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 48 48'><g><rect x='4' y='12' rx='6' ry='6' width='28' height='16' fill='${color}' stroke='${stroke}' stroke-width='2'/><path d='M32 16h6l4 6v6h-10z' fill='${color}' stroke='${stroke}' stroke-width='2'/><circle cx='14' cy='32' r='3.5' fill='#1F2937' stroke='${stroke}' stroke-width='2'/><circle cx='36' cy='32' r='3.5' fill='#1F2937' stroke='${stroke}' stroke-width='2'/></g></svg>`);
+  return `data:image/svg+xml;charset=UTF-8,${body}`;
+}
+const ICONS={
+  ok:L.icon({iconUrl:truckSvg('#10B981'),iconSize:[36,36],iconAnchor:[18,28],popupAnchor:[0,-20]}),
+  warn:L.icon({iconUrl:truckSvg('#F59E0B'),iconSize:[36,36],iconAnchor:[18,28],popupAnchor:[0,-20]}),
+  crit:L.icon({iconUrl:truckSvg('#EF4444'),iconSize:[36,36],iconAnchor:[18,28],popupAnchor:[0,-20]})
+};
+const fleet=[
+  {id:'HN-104',status:'ok',lat:21.0278,lng:105.8342,city:'Hanoi',eta:'Tomorrow 08:30'},
+  {id:'DN-221',status:'warn',lat:16.0544,lng:108.2022,city:'Da Nang',eta:'20:10'},
+  {id:'HCM-307',status:'crit',lat:10.7758,lng:106.7004,city:'Ho Chi Minh City',eta:'16:45'},
+  {id:'LD-090',status:'ok',lat:11.9404,lng:108.4583,city:'Lam Dong',eta:'22:05'}
+];
+
+function initMap(){
+  const mapEl=$('#liveLeaflet'); if(!mapEl) return;
+  map=L.map(mapEl,{zoomControl:false});
+  tileBase=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  tileSat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Imagery © Esri'});
+  L.control.zoom({position:'topright'}).addTo(map);
+
+  clusterLayer=L.markerClusterGroup({
+    maxClusterRadius:60,
+    iconCreateFunction(cluster){
+      const div=document.createElement('div');
+      div.textContent=cluster.getChildCount();
+      div.style.cssText='background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.35);color:#065F46;border-radius:999px;padding:8px 10px;font-weight:800;';
+      return L.divIcon({html:div,className:'custom',iconSize:[36,36]});
+    }
+  });
+  markersLayer=L.layerGroup();
+
+  fleet.forEach(f=>{
+    const m=L.marker([f.lat,f.lng],{icon:ICONS[f.status],title:`${f.id} — ${f.city}`});
+    m.on('mouseover',()=>highlightRow(f.id,true));
+    m.on('mouseout',()=>highlightRow(f.id,false));
+    m.on('click',()=>openLiveFor(f.id));
+    m.bindPopup(`<strong>${f.id}</strong><br/><span class='sub'>${f.city} • ETA ${f.eta}</span><br/><button class='btn' style='margin-top:6px' onclick="openLiveFor('${f.id}')">Open Live</button>`);
+    clusterLayer.addLayer(m); markersLayer.addLayer(m);
+  });
+
+  clusterLayer.addTo(map);
+  map.fitBounds(vnBounds.pad(0.05));
+
+  const fitBtn=$('#fitVNBtn'); if(fitBtn){ fitBtn.addEventListener('click',()=>map.fitBounds(vnBounds.pad(0.05))); }
+  const satBtn=$('#satToggleBtn'); if(satBtn){ satBtn.addEventListener('click',()=>{
+    if(map.hasLayer(tileSat)){
+      map.removeLayer(tileSat); tileBase.addTo(map); satBtn.textContent='🛰️ Satellite';
+    } else {
+      map.removeLayer(tileBase); tileSat.addTo(map); satBtn.textContent='🗺️ Streets';
+    }
+  });}
+  const clusterBtn=$('#clusterToggleBtn'); if(clusterBtn){ clusterBtn.addEventListener('click',()=>{
+    usingCluster=!usingCluster;
+    if(usingCluster){
+      map.removeLayer(markersLayer); clusterLayer.addTo(map); clusterBtn.textContent='Cluster: On';
+    }else{
+      map.removeLayer(clusterLayer); markersLayer.addTo(map); clusterBtn.textContent='Cluster';
+    }
+  });}
+
+  window.addEventListener('resize',()=>map.invalidateSize(),{passive:true});
+}
+function highlightRow(id,on){ const tr=document.querySelector(`[data-row="${id}"]`); if(tr) tr.classList.toggle('highlight',on); }
+function openLiveFor(id){ const s=$('#live-shipment-id'); if(s) s.textContent=id; randomiseVitals(); setActivePage('live'); }
+
+/* Empty state toggle */
+function bindEmptyToggle(){
+  const btn=$('#toggleEmpty'); if(!btn) return;
+  btn.addEventListener('click',()=>{
+    const tableWrap=$('#tableWrap'); const empty=$('#emptyState');
+    if(!tableWrap||!empty) return;
+    const showEmpty=(empty.style.display==='none' || empty.style.display==='');
+    tableWrap.style.display = showEmpty ? 'none' : 'block';
+    empty.style.display = showEmpty ? 'grid' : 'none';
+  });
+}
+
+/* Vitals */
+function randomiseVitals(){
+  const t=(1.4+Math.random()*0.4).toFixed(1);
+  const h=(84+Math.random()*4).toFixed(0);
+  const speed=(55+Math.random()*15).toFixed(0);
+  const lat=(10.7+Math.random()*0.2).toFixed(4);
+  const lon=(106.6+Math.random()*0.2).toFixed(4);
+
+  const vt=$('#vital-temp'); if(vt) vt.textContent=`${t}°C`;
+  const vh=$('#vital-hum');
+  if(vh){ vh.textContent=`${h}%`; const ok=(h>=85 && h<=90); vh.classList.toggle('ok',ok); vh.classList.toggle('warn',!ok); }
+  const vg=$('#vital-gps'); if(vg) vg.textContent=`${lat}, ${lon} • ${speed} km/h`;
+  const vd=$('#vital-door'); if(vd) vd.textContent=(Math.random()>0.92)?'Unlocked':'Locked';
+  const ring=$('#tempRing'); const pct=Math.min(100,Math.max(0, ((parseFloat(t)-0.5)/(3.0-0.5))*100 )); if(ring) ring.style.setProperty('--p', pct+'%');
+}
+
+/* Acknowledge */
+document.addEventListener('DOMContentLoaded',()=>{
+  const ack=$('#acknowledgeBtn');
+  if(ack){ ack.addEventListener('click',()=>{ ack.disabled=true; ack.textContent='✓ Alert Acknowledged'; const box=$('#alert-1'); if(box){ box.style.background='#F3F4F6'; box.style.color='#374151'; box.style.borderColor='#E5E7EB'; } }); }
+});
+
+/* Live chart */
+let chart, ctx, tipEl, cData, options, anim=0, fillsOn=true;
+function ensureLiveChart(){ if(!chart) initLiveChart(); else { resizeCanvas(chart); drawChart(false); } }
+function initLiveChart(){
+  chart=$('#chart-live'); if(!chart) return;
+  ctx=chart.getContext('2d'); tipEl=$('#chart-tip');
+  resizeCanvas(chart);
+  cData=genSeries(96);
+  options={yT:[0.5,3.0],yH:[75,95],anomalies:[90,92],target:[1.0,2.0]};
+  drawChart(true);
+
+  window.addEventListener('resize',()=>{ resizeCanvas(chart); drawChart(false); },{passive:true});
+
+  $$('.timeswitch button').forEach(b=>{
+    b.addEventListener('click',()=>{
+      $$('.timeswitch button').forEach(x=>x.classList.remove('active'));
+      b.addEventListener;
+      b.classList.add('active');
+      const r=b.dataset.range;
+      if(r==='24h') cData=genSeries(96);
+      else if(r==='7d') cData=genSeries(7*96);
+      else cData=genSeries(30*96);
+      anim=0; drawChart(true);
+    });
+  });
+
+  if(tipEl){
+    chart.addEventListener('mousemove',chartHover);
+    chart.addEventListener('mouseleave',()=>tipEl.classList.add('hidden'));
+  }
+  const dl=$('#downloadPng'); if(dl) dl.addEventListener('click',()=>{ const a=document.createElement('a'); a.download='evergreen-telemetry.png'; a.href=chart.toDataURL('image/png'); a.click(); });
+  const tf=$('#toggleFill'); if(tf) tf.addEventListener('click',()=>{ fillsOn=!fillsOn; drawChart(false); });
+
+  buildPhotoStrip();
+}
+function genSeries(n){
+  const temp=[],hum=[],ts=[];
+  let t=1.5,h=85;
+  const step=15*60*1000;
+  let start=Date.now()-n*step;
+  for(let i=0;i<n;i++){
+    t+=(Math.random()-0.5)*0.12;
+    h+=(Math.random()-0.5)*1.2;
+    temp.push(t); hum.push(h); ts.push(new Date(start+i*step));
+  }
+  if(n>6){ temp[n-6]+=0.5; temp[n-5]+=0.7; }
+  return {temp,hum,ts,n};
+}
+function resizeCanvas(c){
+  const dpr=window.devicePixelRatio||1;
+  const rect=c.getBoundingClientRect();
+  const w=Math.max(320,rect.width||600);
+  const h=Math.max(220,rect.height||260);
+  c.width=w*dpr; c.height=h*dpr;
+  c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+}
+function drawChart(animated){
+  if(!chart||!ctx||!cData) return;
+  const r=chart.getBoundingClientRect();
+  const width=r.width||600, height=r.height||260;
+  ctx.clearRect(0,0,width,height);
+
+  const left=44,right=width-10,top=10,bottom=height-22,w=right-left,h=bottom-top;
+
+  ctx.strokeStyle='#E5E7EB'; ctx.beginPath();
+  for(let i=0;i<=4;i++){ const y=top+i*(h/4); ctx.moveTo(left,y); ctx.lineTo(right,y); }
+  ctx.stroke();
+
+  ctx.fillStyle='#6B7280'; ctx.font='12px system-ui';
+  for(let i=0;i<=4;i++){ const y=top+i*(h/4); const val=(options.yT[1]-(i/4)*(options.yT[1]-options.yT[0])).toFixed(1); ctx.fillText(val,6,y+4); }
+
+  ctx.strokeStyle='#CBD5E1'; ctx.beginPath(); ctx.moveTo(left,bottom); ctx.lineTo(right,bottom); ctx.stroke();
+
+  const n=cData.n;
+  const xAt=i=>left+(i/(n-1))*w;
+  const yT=v=>top+(1-(v-options.yT[0])/(options.yT[1]-options.yT[0]))*h;
+  const yH=v=>top+(1-(v-options.yH[0])/(options.yH[1]-options.yH[0]))*h;
+
+  const b1=yT(options.target[0]), b2=yT(options.target[1]);
+  ctx.fillStyle='rgba(16,185,129,0.10)';
+  ctx.fillRect(left,Math.min(b1,b2),w,Math.abs(b2-b1));
+
+  if(fillsOn){
+    const g1=ctx.createLinearGradient(0,top,0,bottom); g1.addColorStop(0,'rgba(37,99,235,0.25)'); g1.addColorStop(1,'rgba(37,99,235,0.03)');
+    ctx.beginPath(); ctx.moveTo(left,bottom);
+    for(let i=0;i<n;i++){ ctx.lineTo(xAt(i), yT(cData.temp[i])); }
+    ctx.lineTo(right,bottom); ctx.closePath(); ctx.fillStyle=g1; ctx.fill();
+
+    const g2=ctx.createLinearGradient(0,top,0,bottom); g2.addColorStop(0,'rgba(16,185,129,0.22)'); g2.addColorStop(1,'rgba(16,185,129,0.03)');
+    ctx.beginPath(); ctx.moveTo(left,bottom);
+    for(let i=0;i<n;i++){ ctx.lineTo(xAt(i), yH(cData.hum[i])); }
+    ctx.lineTo(right,bottom); ctx.closePath(); ctx.fillStyle=g2; ctx.fill();
+  }
+
+  const maxI=animated?Math.max(1,Math.floor((n-1)*anim)):n-1;
+
+  ctx.lineWidth=2;
+  for(let i=1;i<=maxI;i++){
+    const mid=(cData.temp[i-1]+cData.temp[i])/2;
+    ctx.strokeStyle=(mid<options.target[0]||mid>options.target[1])?'#EF4444':'#2563EB';
+    ctx.beginPath(); ctx.moveTo(xAt(i-1), yT(cData.temp[i-1])); ctx.lineTo(xAt(i), yT(cData.temp[i])); ctx.stroke();
+  }
+
+  ctx.strokeStyle='#10B981'; ctx.lineWidth=2; ctx.beginPath();
+  for(let i=0;i<=maxI;i++){ const x=xAt(i), y=yH(cData.hum[i]); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.stroke();
+
+  ctx.fillStyle='#EF4444';
+  (options.anomalies||[]).forEach(i=>{ if(i>maxI||i>=n) return; ctx.beginPath(); ctx.arc(xAt(i), yT(cData.temp[i]), 4, 0, Math.PI*2); ctx.fill(); });
+
+  if(animated && anim<1){ anim+=0.03; requestAnimationFrame(()=>drawChart(true)); }
+}
+function chartHover(e){
+  const rect=chart.getBoundingClientRect();
+  const x=e.clientX-rect.left, y=e.clientY-rect.top;
+  const left=44,right=rect.width-10,w=right-left;
+  if(x<left || x>right){ if(tipEl) tipEl.classList.add('hidden'); return; }
+  const n=cData.n;
+  const i=Math.max(0,Math.min(n-1,Math.round((x-left)/(w/(n-1)))));
+  const t=cData.temp[i].toFixed(2), h=cData.hum[i].toFixed(1), ts=cData.ts[i];
+  const stamp=ts.toLocaleString([], {hour:'2-digit',minute:'2-digit'})+' '+ts.toLocaleDateString();
+  if(tipEl){ tipEl.innerHTML=`<strong>${stamp}</strong><br/><span style="opacity:.9">Temp ${t}°C • Hum ${h}%</span>`; tipEl.style.left=x+'px'; tipEl.style.top=y+'px'; tipEl.classList.remove('hidden'); }
+}
+function buildPhotoStrip(){
+  const strip=$('#photoStrip'); if(!strip) return;
+  const svg=(t,bg,fg)=>'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80'><rect width='100%' height='100%' rx='8' fill='${bg}'/><text x='50%' y='55%' text-anchor='middle' font-family='system-ui' font-size='13' fill='${fg}'>${t}</text></svg>`);
+  const items=[{t:'Pre-cool room',bg:'#DBEAFE',fg:'#1E3A8A'},{t:'Loading dock',bg:'#FEF3C7',fg:'#7C2D12'},{t:'On the road',bg:'#ECFDF5',fg:'#065F46'}];
+  strip.innerHTML=items.map(i=>`<div class="photo"><img alt="${i.t}" src="${svg(i.t,i.bg,i.fg)}"/><div class="meta">${i.t}<br/><span class="sub">No deviations</span></div></div>`).join('');
+}
+function updateChartRealtime(){
+  if(!cData) return;
+  cData.temp.shift(); cData.hum.shift(); cData.ts.shift();
+  cData.temp.push(1.5+(Math.random()-0.5)*0.2);
+  cData.hum.push(85+(Math.random()-0.5)*2);
+  cData.ts.push(new Date());
+  drawChart(false);
+}
+
+/* Planner (fixed) */
+function bindPlanner(){
+  const planBtn = $('#planBtn'); if(planBtn) planBtn.addEventListener('click', planRoutes);
+  const simulateBtn = $('#simulateRoutesBtn'); if(simulateBtn) simulateBtn.addEventListener('click', planRoutes);
+  const clearBtn = $('#clearBtn');
+  if(clearBtn) clearBtn.addEventListener('click', ()=>{
+    const r=$('#routes'), rs=$('#routes-sub'), o=$('#origin'), d=$('#destination');
+    if(o) o.value=''; if(d) d.value='';
+    if(r) r.innerHTML='';
+    if(rs) rs.textContent='Enter the details and click Plan Routes';
+  });
+  document.addEventListener('click', (e)=>{
+    const btn = e.target.closest('[data-assign]');
+    if(!btn) return;
+    const rid = btn.getAttribute('data-assign');
+    const temp = btn.getAttribute('data-temp');
+    alert(`Assigned Route ${rid} • Setpoint ${temp}°C`);
+  });
+}
+function routeStripSVG(){
+  return `<svg width="100%" height="64" viewBox="0 0 320 64" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+    <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#93C5FD"/><stop offset="1" stop-color="#A7F3D0"/></linearGradient></defs>
+    <rect x="0" y="0" width="320" height="64" rx="10" fill="url(#g)"/>
+    <path d="M16 42 C 60 12, 120 52, 160 30 S 260 36, 304 22" stroke="#2563EB" stroke-width="4" fill="none"/>
+    <circle cx="16" cy="42" r="5" fill="#10B981"/><circle cx="304" cy="22" r="5" fill="#10B981"/>
+  </svg>`;
+}
+function routeCard(o,temp){
+  return `<article class="section-card">
+    <div class="row" style="justify-content:space-between">
+      <div class="h2">${o.title}</div><span class="sub">Integrity ${o.integrity}</span>
+    </div>
+    <div style="border-radius:10px;overflow:hidden;border:1px solid var(--line);margin:6px 0">${routeStripSVG()}</div>
+    <div class="sub">ETA <b>${o.eta}</b> • Fuel <b>${o.fuel}</b> • Road <b>${o.quality}</b> • CO₂ <b>${o.co2}</b></div>
+    <div class="sub" style="margin-top:4px">${o.info}</div>
+    <div class="row" style="justify-content:flex-end;margin-top:6px">
+      <button class="btn" data-assign="${o.id}" data-temp="${temp}">Assign Route</button>
+    </div>
+  </article>`;
+}
+function planRoutes(){
+  const origin = ($('#origin')?.value || 'Da Lat (Lam Dong)').trim();
+  const destination = ($('#destination')?.value || 'Ho Chi Minh City').trim();
+  const product = $('#product')?.value || 'Strawberries (Premium)';
+  const tempInput = $('#temp')?.value || '1.5';
+  const temp = Number.parseFloat(tempInput);
+  const status=$('#planStatus'), sub=$('#routes-sub'), list=$('#routes');
+
+  if(status) status.style.display='inline';
+  if(sub) sub.textContent = `AI is evaluating ${product} at ${temp.toFixed(1)}°C (${origin} → ${destination}) …`;
+
+  window.setTimeout(()=>{
+    const opts=[
+      {id:'A',title:'Route A — Fastest',eta:'4h 15m',fuel:'38 L',quality:'Standard',co2:'—',integrity:86,info:'Highway 20 + CT01. Mild congestion near Dau Giay.'},
+      {id:'B',title:'Route B — Most Fuel Efficient',eta:'4h 40m',fuel:'32 L',quality:'Good',co2:'↓ 12.4 kg CO₂',integrity:88,info:'Avoids peak tolls and applies eco-speed profiles.'},
+      {id:'C',title:'Route C — Optimal Product Integrity',eta:'4h 55m',fuel:'34 L',quality:'Excellent',co2:'↓ 9.1 kg CO₂',integrity:96,info:'Bypasses heatwave zone; smoother surface reduces vibration.'}
+    ];
+    if(list) list.innerHTML = opts.map(o=>routeCard(o,temp.toFixed(1))).join('');
+    if(status) status.style.display='none';
+    if(sub) sub.textContent = `3 optimized options for ${product} (${origin} → ${destination}) at ${temp.toFixed(1)}°C`;
+    if(list) list.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 650);
+}
+
+/* Alerts */
+const ALERTS_DATA=[
+  {id:'A1',level:'critical',title:'Coolant leak suspected',msg:'Duty cycle ↑ 15% without temperature drop on HCM-307.',when:'14:12',where:'Highway 1A',ship:'HCM-307'},
+  {id:'A2',level:'warning',title:'Thermal risk in 2h',msg:'Forecast indicates risk; driver inspection recommended on DN-221.',when:'13:58',where:'Sơn Trà, Đà Nẵng',ship:'DN-221'},
+  {id:'A3',level:'info',title:'Route deviation recovered',msg:'Temporary detour, back on planned route HN-104.',when:'12:46',where:'Cầu Nhật Tân',ship:'HN-104'}
+];
+function renderAlerts(filter){
+  const feed=$('#alertsFeed'), empty=$('#alertsEmpty'); if(!feed||!empty) return;
+  const items=ALERTS_DATA.filter(a=> filter==='all' ? true : a.level===filter);
+  const html=items.map(a=>{
+    const levelClass=a.level==='critical'?'level-crit':a.level==='warning'?'level-warn':'level-info';
+    const tagClass=a.level==='critical'?'atag crit':a.level==='warning'?'atag warn':'atag info';
+    const icon=a.level==='critical'?'⚠️':a.level==='warning'?'⚡':'ℹ️';
+    return `<div class="alert-row ${levelClass}">
+      <div class="aicon">${icon}</div>
+      <div>
+        <div class="row" style="justify-content:space-between">
+          <div><strong>${a.title}</strong> — <span class="${tagClass}" style="margin-left:6px">${a.level.toUpperCase()}</span></div>
+          <div class="sub">${a.when} • ${a.where}</div>
+        </div>
+        <div style="margin-top:4px">${a.msg}</div>
+        <div class="sub" style="margin-top:4px">Shipment <button class="btn secondary" style="padding:4px 8px" data-open-live="${a.ship}">${a.ship}</button></div>
+      </div>
+      <button class="btn secondary" style="padding:6px 10px" onclick="alert('Noted ${a.id}')">Acknowledge</button>
+    </div>`;
+  }).join('');
+  feed.innerHTML=html;
+  empty.style.display = items.length ? 'none' : 'grid';
+}
+function bindAlertFilters(){
+  $$('.filters .pill').forEach(p=>{
+    p.addEventListener('click',()=>{
+      $$('.filters .pill').forEach(x=>x.classList.remove('active'));
+      p.classList.add('active');
+      const type=p.getAttribute('data-filter')||'all';
+      renderAlerts(type);
+    });
+  });
+}
+
+/* Certificate with visible stats */
+function initCert(){
+  const c = document.querySelector('#chart-cert'); if(!c) return;
+  const ctx = c.getContext('2d');
+  const sk = document.querySelector('#certSkeleton');
+
+  // Generate sample series
+  const pts = 144, s = [];
+  let v = 1.6;
+  for(let i=0;i<pts;i++){ v+=(Math.random()-0.5)*0.08; s.push(v); }
+
+  // Stats
+  const min = Math.min(...s);
+  const max = Math.max(...s);
+  const avg = s.reduce((a,b)=>a+b,0)/s.length;
+
+  // Size canvas
+  function size(){
+    const dpr = window.devicePixelRatio||1;
+    const r = c.getBoundingClientRect();
+    const w = Math.max(320, r.width||800);
+    const h = Math.max(240, r.height||260);
+    c.width = w*dpr; c.height = h*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  size();
+
+  // Draw
+  const r = c.getBoundingClientRect();
+  const width=r.width||800, height=r.height||260;
+  ctx.clearRect(0,0,width,height);
+
+  const left=48, right=width-12, top=24, bottom=height-26, w=right-left, h=bottom-top;
+
+  // Grid
+  ctx.strokeStyle='#E5E7EB'; ctx.beginPath();
+  for(let i=0;i<=4;i++){ const y=top+i*(h/4); ctx.moveTo(left,y); ctx.lineTo(right,y); } ctx.stroke();
+
+  // Y labels
+  ctx.fillStyle='#6B7280'; ctx.font='12px system-ui';
+  const yMin = 0.5, yMax = 3.0;
+  for(let i=0;i<=4;i++){
+    const y=top+i*(h/4);
+    const val=(yMax-(i/4)*(yMax-yMin)).toFixed(1);
+    ctx.fillText(val+'°C', 8, y+4);
+  }
+
+  // Target band 1–2°C
+  const y = (val)=> top+(1-(val-yMin)/(yMax-yMin))*h;
+  const b1 = y(1.0), b2 = y(2.0);
+  ctx.fillStyle='rgba(16,185,129,0.10)';
+  ctx.fillRect(left, Math.min(b1,b2), w, Math.abs(b2-b1));
+
+  // Series
+  ctx.strokeStyle='#2563EB'; ctx.lineWidth=2; ctx.beginPath();
+  for(let i=0;i<pts;i++){
+    const x = left + (i/(pts-1))*w;
+    const yy = y(s[i]);
+    if(i===0) ctx.moveTo(x,yy); else ctx.lineTo(x,yy);
+  }
+  ctx.stroke();
+
+  // Stats header
+  ctx.fillStyle='#334155'; ctx.font='12px system-ui';
+  ctx.fillText(`Min ${min.toFixed(2)}°C • Avg ${avg.toFixed(2)}°C • Max ${max.toFixed(2)}°C`, left, top-8);
+
+  // X baseline
+  ctx.strokeStyle='#CBD5E1'; ctx.beginPath(); ctx.moveTo(left,bottom); ctx.lineTo(right,bottom); ctx.stroke();
+
+  if(sk) sk.style.display='none';
+
+  // Redraw on resize
+  window.addEventListener('resize', ()=>{ size(); initCert(); }, {once:true, passive:true});
+}
+function makeHash(seed){ return '0x'+(seed+Math.random().toString(16).slice(2,10)).slice(0,8)+'…'+Math.random().toString(16).slice(2,6); }
+function loadCertificate(id){
+  setActivePage('certificate');
+  const idEl=$('#cert-id'); if(idEl) idEl.textContent=`Shipment: ${id} • Evergreen Chain Ledger`;
+  const detailsMap={
+    'DL-555':'Product: Strawberries (Premium) • Quantity: 1,200 kg<br/>Origin: Da Lat (Lam Dong), Vietnam → Destination: Singapore (Changi Cargo)',
+    'HN-431':'Product: Lychee • Quantity: 8,500 kg<br/>Origin: Bac Giang, Vietnam → Destination: Shanghai (Pudong)',
+    'CT-302':'Product: Shrimp • Quantity: 5,000 kg<br/>Origin: Can Tho, Vietnam → Destination: Tokyo (Narita)'
+  };
+  const det=$('#cert-details'); if(det) det.innerHTML=(detailsMap[id]||detailsMap['DL-555']);
+  const hash='0x'+btoa(id).slice(0,8).toLowerCase()+'…'+Math.floor(Math.random()*0xFFFF).toString(16);
+  const hashEl=$('#cert-hash'); if(hashEl) hashEl.textContent=hash;
+
+  const events=[
+    {t:'Harvested',time:'2025-08-10 05:20',hash:makeHash('harvest')},
+    {t:'Stored',time:'2025-08-10 06:12',hash:makeHash('stored')},
+    {t:'In Transit',time:'2025-08-10 08:00 → 2025-08-12 07:30',hash:makeHash('transit')},
+    {t:'Delivered',time:'2025-08-12 09:22',hash:makeHash('delivered')}
+  ];
+  const log=$('#journeyLog');
+  if(log){
+    log.innerHTML=events.map(e=>`<div class="row" style="justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff"><div><strong>${e.t}</strong> — ${e.time}<br/><span class="sub mono">${e.hash}</span></div><button class="btn secondary" data-copy="${e.hash}">Copy</button></div>`).join('');
+    log.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',async()=>{
+      await navigator.clipboard.writeText(b.getAttribute('data-copy')||'');
+      b.textContent='Copied'; setTimeout(()=>b.textContent='Copy',900);
+    }));
+  }
+  initCert();
+}
+function bindCertButtons(){
+  $$('[data-nav="certificate"]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const id=b.getAttribute('data-cert')||'DL-555';
+      loadCertificate(id);
+    });
+  });
+}
+function bindShareVerify(){
+  const s=$('#shareBtn'); if(s){ s.addEventListener('click',async()=>{
+    const data={title:'Evergreen Certificate',text:'Verifiable Certificate of Provenance',url:location.href.split('#')[0]};
+    if(navigator.share){ try{ await navigator.share(data);}catch{} } else { try{ await navigator.clipboard.writeText(data.url);}catch{} alert('Link copied'); }
+  });}
+  const v=$('#verifyBtn'); if(v){ v.addEventListener('click',()=>alert('Ledger verification successful: Merkle proof validated on Evergreen Chain.')); }
+}
+
+/* Driver */
+let drvMap;
+function initDriver(){
+  const el=$('#driverMap'); if(!el) return;
+  drvMap=L.map(el,{zoomControl:false});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(drvMap);
+  const start=[10.78,106.70], mid=[16.05,108.20], end=[20.86,106.68];
+  const line=L.polyline([start,mid,end],{color:'#2563EB',weight:5}).addTo(drvMap);
+  L.marker(start,{icon:ICONS.ok}).addTo(drvMap);
+  L.marker(end,{icon:ICONS.ok}).addTo(drvMap);
+  drvMap.fitBounds(line.getBounds().pad(0.2));
+
+  const sim=$('#simulateCritical'); if(sim) sim.addEventListener('click',()=>{ const d=$('#drvDanger'); if(d) d.classList.add('show'); });
+  const dis=$('#dismissDanger'); if(dis) dis.addEventListener('click',()=>{ const d=$('#drvDanger'); if(d) d.classList.remove('show'); });
+  const conf=$('#confirmArrival'); if(conf) conf.addEventListener('click',()=>{ const m=$('#drvMsg'); if(m) m.textContent='Arrival confirmed. Generating handoff record…'; });
+  const rep=$('#reportIssue'); if(rep) rep.addEventListener('click',()=>{ const m=$('#drvMsg'); if(m) m.textContent='Issue reported. Ops will contact you.'; });
+}
+</script>
+</body>
+</html>
+
